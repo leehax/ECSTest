@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using DefaultNamespace;
 using Unity.Burst;
@@ -103,88 +104,96 @@ public class Pathfinding : SystemBase
             var pathPositionBuffers = chunk.GetBufferAccessor(PathPositionType);
             for (int i = 0; i < chunk.Count; i++)
             {
-                //Debug.Log($"Path ndoe arrray lenght {PathNodeArray.Length}");
                 var pathfindingParams = pathfindingParamsArray[i];
-                for (int j = 0; j < PathNodeArray.Length; j++)
-                {
-                    var pathNode = PathNodeArray[j];
-                    pathNode.HCost = CalculateDistanceCost(new int2(pathNode.X, pathNode.Y), pathfindingParams.EndPosition);
-                    pathNode.CalculateFCost();
-                    pathNode.CameFromNodeIndex = -1;
-
-                    PathNodeArray[j] = pathNode;
-                }
-         
-              
-
                 var endNodeIndex = CalculateIndex(pathfindingParams.EndPosition.x, pathfindingParams.EndPosition.y, GridSize.x);
                 var startNode = PathNodeArray[CalculateIndex(pathfindingParams.StartPosition.x, pathfindingParams.StartPosition.y, GridSize.x)];
                 startNode.GCost = 0;
                 startNode.CalculateFCost();
                 PathNodeArray[startNode.Index] = startNode;
-
+                
                 NativeList<int> openList = new NativeList<int>(128, Allocator.Temp);
                 NativeList<int> closedList = new NativeList<int>(128,Allocator.Temp);
-
+                
                 openList.Add(startNode.Index);
-
-                while (openList.Length > 0)
+                int currentNodeIndex = GetLowestCostFNodeIndex(openList, PathNodeArray);
+                var flags = RecursivePathFinding(currentNodeIndex, endNodeIndex, openList, closedList);
+                
+                DynamicBuffer<PathPosition> pathPositionBuffer = pathPositionBuffers[i];
+                pathPositionBuffer.Clear();
+                if (flags == 0)//Found Path
                 {
-                    int currentNodeIndex = GetLowestCostFNodeIndex(openList, PathNodeArray);
-                    var currentNode = PathNodeArray[currentNodeIndex];
+                    PathNode endNode = PathNodeArray[endNodeIndex];
+                    CalculatePath(PathNodeArray, endNode, pathPositionBuffer);
+                    pathIndexArray[i] = new PathIndex {Value = pathPositionBuffer.Length - 1};
 
-                    if (currentNodeIndex == endNodeIndex)
+                }
+                else
+                {
+                    pathIndexArray[i] = new PathIndex {Value = -1};
+                }
+
+                openList.Dispose();
+                closedList.Dispose();
+                CommandBuffer.RemoveComponent<PathfindingParams>(chunkIndex,entities[chunkIndex]);
+            }
+        }
+        private int RecursivePathFinding( int currentNodeIndex, int endNodeIndex, NativeList<int> openList, NativeList<int> closedList)
+        {
+            
+            var endNode = PathNodeArray[endNodeIndex];
+            var endPosition = new int2(endNode.X, endNode.Y);
+
+            var currentNode = PathNodeArray[currentNodeIndex];
+            if (currentNodeIndex == endNodeIndex)
+            {
+                if (endNode.CameFromNodeIndex == -1)
+                {
+                    //didnt find path
+                    return -1;
+                }
+                return 0;
+            }
+            else
+            {
+                var lowestF = int.MaxValue;
+                int index = -1;
+
+                for (int i = 0; i < NeighbourOffsets.Length; i++)
+                {
+                    int2 neighbourOffset = NeighbourOffsets[i];
+                    
+                    int2 neighbourPosition = new int2(currentNode.X + neighbourOffset.x,
+                        currentNode.Y + neighbourOffset.y);
+                    
+                    if (!IsPositionValid(neighbourPosition, GridSize))
                     {
-                        break;
+                        continue;
                     }
-
-                    for (int j = 0; j < openList.Length; j++)
+                    int neighbourNodeIndex =
+                        CalculateIndex(neighbourPosition.x, neighbourPosition.y, GridSize.x);
+                    bool isInOpenOrClosedList =
+                        openList.Contains(neighbourNodeIndex) || closedList.Contains(neighbourNodeIndex);
+                    if (isInOpenOrClosedList)
                     {
-                        if (openList[j] == currentNodeIndex)
-                        {
-                            openList.RemoveAtSwapBack(j);
-                            break;
-                        }
+                        continue;
                     }
-
-                    closedList.Add(currentNodeIndex);
-
-                    for (int j = 0; j < NeighbourOffsets.Length; j++)
+                    var neighbourNode = PathNodeArray[neighbourNodeIndex];
+                    if (neighbourNode.IsWalkable)
                     {
-                        int2 neighbourOffset = NeighbourOffsets[j];
-                        int2 neighbourPosition = new int2(currentNode.X + neighbourOffset.x,
-                            currentNode.Y + neighbourOffset.y);
-
-                        if (!IsPositionValid(neighbourPosition, GridSize))
-                        {
-                            continue;
-                        }
-
-                        int neighbourNodeIndex =
-                            CalculateIndex(neighbourPosition.x, neighbourPosition.y, GridSize.x);
-
-                        if (closedList.Contains(neighbourNodeIndex))
-                        {
-                            continue;
-                        }
-
-                        var neighbourNode = PathNodeArray[neighbourNodeIndex];
-                        if (!neighbourNode.IsWalkable)
-                        {
-                            continue;
-                        }
-
+                     
+                        
                         var currentNodePosition = new int2(currentNode.X, currentNode.Y);
+                      
                         int tentativeGCost = currentNode.GCost +
                                              CalculateDistanceCost(currentNodePosition, neighbourPosition);
-
                         if (tentativeGCost < neighbourNode.GCost)
                         {
-                            neighbourNode.CameFromNodeIndex = currentNodeIndex;
+                            neighbourNode.CameFromNodeIndex = currentNode.Index;
                             neighbourNode.GCost = tentativeGCost;
+                            neighbourNode.HCost =
+                                CalculateDistanceCost(neighbourPosition, endPosition);
                             neighbourNode.CalculateFCost();
                             PathNodeArray[neighbourNodeIndex] = neighbourNode;
-
                             if (!openList.Contains(neighbourNode.Index))
                             {
                                 openList.Add(neighbourNode.Index);
@@ -192,37 +201,36 @@ public class Pathfinding : SystemBase
                         }
                     }
                 }
-
-                Debug.Log(openList.Length);
-
-                DynamicBuffer<PathPosition> pathPositionBuffer = pathPositionBuffers[i];
-                pathPositionBuffer.Clear();
-
-                // endNodeIndex = CalculateIndex(pathfindingParams.EndPosition.x,
-                //     pathfindingParams.EndPosition.y, GridSize.x);
-                PathNode endNode = PathNodeArray[endNodeIndex];
-
-                if (endNode.CameFromNodeIndex == -1)
+                closedList.Add(currentNode.Index);
+                for (int j = 0; j < openList.Length; j++)
                 {
-                    //didnt find path
-                    pathIndexArray[i] = new PathIndex {Value = -1};
-                    //Debug.Log("Didnt find path");
+                    if (openList[j] == currentNode.Index)
+                    {
+                        openList.RemoveAtSwapBack(j);
+                        break;
+                    }
                 }
-                else
+                if (openList.Length > 0)
                 {
-                    //Found Path
-                    CalculatePath(PathNodeArray, endNode, pathPositionBuffer);
-                    pathIndexArray[i] = new PathIndex {Value = pathPositionBuffer.Length - 1};
+                    for (int i = 0; i < openList.Length; i++)
+                    {
+                        if (PathNodeArray[openList[i]].FCost < lowestF)
+                        {
+                            lowestF = PathNodeArray[openList[i]].FCost;
+                            index = i;
+                        }
+                    }
+
+                    currentNodeIndex = openList[index];
+                    return RecursivePathFinding(currentNodeIndex,endNodeIndex,openList,closedList);
                 }
-               // Debug.Log($"chunkj index {i}");
-                openList.Dispose();
-                closedList.Dispose();
-                //NeighbourOffsets.Dispose();
-                CommandBuffer.RemoveComponent<PathfindingParams>(chunkIndex,entities[chunkIndex]);
+
+                return -1;
             }
         }
     }
 
+   
     private NativeArray<PathNode> GetPathNodeArray()
     {
         TileGrid<GridNode> grid = DefaultNamespace.SetupPathFindingGrid.Instance.Grid;
@@ -254,6 +262,20 @@ public class Pathfinding : SystemBase
         return pathNodeArray;
     }
 
+    private static NativeArray<PathNode> GetNeighbours(NativeArray<PathNode> pathNodeArray,
+        NativeArray<PathNode> neighbourOffsets, PathNode currentNode, int2 gridSize )
+    {
+        var neighbours = new NativeArray<PathNode>();
+        for (int i = 0; i < neighbourOffsets.Length; i++)
+        {
+            neighbours[i] =
+                pathNodeArray[
+                    CalculateIndex(currentNode.X + neighbourOffsets[i].X,
+                        currentNode.Y + neighbourOffsets[i].Y, gridSize.x)];
+        }
+
+        return neighbours;
+    }
 
     private static void CalculatePath(NativeArray<PathNode> pathNodeArray, PathNode endNode,
         DynamicBuffer<PathPosition> pathPositionBuffer)
@@ -299,6 +321,7 @@ public class Pathfinding : SystemBase
 
         return path;
     }
+    
 
     private static bool IsPositionValid(int2 gridPosition, int2 gridSize)
     {

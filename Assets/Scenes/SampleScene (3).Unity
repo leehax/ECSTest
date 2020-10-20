@@ -1992,8 +1992,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 302f2e3170464bf8b5d1e78fea8b5796, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Width: 500
-  Height: 500
+  Width: 10
+  Height: 10
   CellSize: 1
   OriginOffset: {x: -0.5, y: 0, z: -0.5}
   _pathFindingVisual: {fileID: 1530201116}
