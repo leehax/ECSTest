@@ -37,6 +37,7 @@ namespace DefaultNamespace
             {
                 _updateMesh = false;
                 UpdateVisual();
+                Debug.Log("Update Grid Visual");
             }
         }
 
@@ -55,10 +56,7 @@ namespace DefaultNamespace
                     float gridValueNormalized = gridValue.IsWalkable() ? 1f : 0f;
                     Vector2 gridValueUV = new Vector2(gridValueNormalized, 0f);
 
-                    // if (!gridValue.IsWalkable())
-                    // {
-                    //     vertices[index] += new Vector3(0, 1, 0);
-                    // }
+                 
                     MeshUtils.AddToMeshArrays(vertices, uv, triangles, index,
                         _grid.GetWorldPosition(x, y) + quadSize * .5f, 0f, quadSize, gridValueUV,
                         gridValueUV);

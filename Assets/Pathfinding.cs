@@ -47,8 +47,6 @@ public class Pathfinding : SystemBase
         int gridHeight = DefaultNamespace.SetupPathFindingGrid.Instance.Grid.GetHeight();
         int2 gridSize = new int2(gridWidth, gridHeight);
 
-        var findPathJobList = new NativeList<FindPathJob>().AsParallel();
-        var jobHandleList = new NativeList<JobHandle>(Allocator.Temp);
         var pathNodeArray = GetPathNodeArray();
         _neighbourOffsets = new NativeArray<int2>(8, Allocator.TempJob)
         {
@@ -116,7 +114,8 @@ public class Pathfinding : SystemBase
                 
                 openList.Add(startNode.Index);
                 int currentNodeIndex = GetLowestCostFNodeIndex(openList, PathNodeArray);
-                var flags = RecursivePathFinding(currentNodeIndex, endNodeIndex, openList, closedList);
+                var recursionCounter = new int();
+                var flags = RecursivePathFinding(currentNodeIndex, endNodeIndex, openList, closedList, recursionCounter);
                 
                 DynamicBuffer<PathPosition> pathPositionBuffer = pathPositionBuffers[i];
                 pathPositionBuffer.Clear();
@@ -137,9 +136,9 @@ public class Pathfinding : SystemBase
                 CommandBuffer.RemoveComponent<PathfindingParams>(chunkIndex,entities[chunkIndex]);
             }
         }
-        private int RecursivePathFinding( int currentNodeIndex, int endNodeIndex, NativeList<int> openList, NativeList<int> closedList)
+        private int RecursivePathFinding( int currentNodeIndex, int endNodeIndex, NativeList<int> openList, NativeList<int> closedList, int counter)
         {
-            
+            counter++;
             var endNode = PathNodeArray[endNodeIndex];
             var endPosition = new int2(endNode.X, endNode.Y);
 
@@ -222,7 +221,7 @@ public class Pathfinding : SystemBase
                     }
 
                     currentNodeIndex = openList[index];
-                    return RecursivePathFinding(currentNodeIndex,endNodeIndex,openList,closedList);
+                    return RecursivePathFinding(currentNodeIndex,endNodeIndex,openList,closedList, counter);
                 }
 
                 return -1;

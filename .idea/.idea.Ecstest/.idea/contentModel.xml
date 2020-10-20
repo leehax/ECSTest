@@ -12,16 +12,13 @@
           </e>
           <e p="readme.txt" t="Include" />
         </e>
-        <e p="Direction.cs" t="Include" />
         <e p="DrawPathSystem.cs" t="Include" />
-        <e p="EntitySpawnr.cs" t="Include" />
         <e p="GridMap" t="Include">
           <e p="Scripts" t="Include">
             <e p="MeshUtils.cs" t="Include" />
           </e>
         </e>
         <e p="GridNode.cs" t="Include" />
-        <e p="MoveSystem.cs" t="Include" />
         <e p="Pathfinding.cs" t="Include" />
         <e p="PathfindingParams.cs" t="Include" />
         <e p="PathFindingVisual.cs" t="Include" />
@@ -30,7 +27,6 @@
         <e p="PathPosition.cs" t="Include" />
         <e p="PathPositionAuthoring.cs" t="Include" />
         <e p="SetupPathFindingGrid.cs" t="Include" />
-        <e p="SpawnComponent.cs" t="Include" />
         <e p="TileGrid.cs" t="Include" />
         <e p="UnitMoveOrderSystem.cs" t="Include" />
       </e>

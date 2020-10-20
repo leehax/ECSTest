@@ -41,15 +41,13 @@ public class UnitMoveOrderSystem:SystemBase
                 grid.Grid.GetXY(translation.Value+(float3)SetupPathFindingGrid.Instance.OriginOffset*cellSize*0.5f ,out int startX, out int startY);
   
                 ValidateGridPosition(ref startX, ref startY);
-                //Debug.Log($"Added params comp index {entityInQueryIndex}");
                 ecb.AddComponent(entity, new PathfindingParams
                 {
                     StartPosition = new int2(startX, startY),
                     EndPosition = new int2(endX, endY),
                 });
 
-            }).WithStructuralChanges()
-                .Run();
+            }).WithoutBurst().Run();
         
         }
     }
