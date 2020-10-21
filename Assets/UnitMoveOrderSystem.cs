@@ -1,4 +1,5 @@
 ﻿using DefaultNamespace;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Entities.CodeGeneratedJobForEach;
 using Unity.Mathematics;
@@ -7,18 +8,19 @@ using UnityEngine;
 
 public class UnitMoveOrderSystem:SystemBase
 {
-    private EntityCommandBufferSystem ECB;
+    private EntityCommandBufferSystem _ecbSystem;
     protected override void OnCreate()
     {
-        ECB = World.GetOrCreateSystem<EntityCommandBufferSystem>();
+        _ecbSystem = World.GetOrCreateSystem<EntityCommandBufferSystem>();
     }
 
     protected override void OnUpdate()
     {
-        var ecb = ECB.CreateCommandBuffer();
+        var ecb = _ecbSystem.CreateCommandBuffer().AsParallelWriter();
         if (Input.GetMouseButtonDown(1))
         {
-            float cellSize = SetupPathFindingGrid.Instance.Grid.GetCellSize();
+            var grid = SetupPathFindingGrid.Instance;
+            float cellSize =grid.Grid.GetCellSize();
             Vector3 planeNormal = new Vector3(0, 1, 0);
             Vector3 planeCenter = new Vector3(0, 0, 0);
             Ray cameraRay = Camera.main.ScreenPointToRay(Input.mousePosition);
@@ -30,31 +32,41 @@ public class UnitMoveOrderSystem:SystemBase
             float t = Vector3.Dot(difference, planeNormal) / denominator;
 
             float3 planeIntersection = lineOrigin + (lineDirection * t);
-
-            var grid = SetupPathFindingGrid.Instance;
-            grid.Grid.GetXY(planeIntersection, out int endX, out int endY);
-            ValidateGridPosition(ref endX, ref endY);
-           // Debug.Log($"X = {endX}, Y = {endY}");
-            Entities.ForEach((Entity entity, int entityInQueryIndex, DynamicBuffer<PathPosition> pathPositionBuffer,
+            float3 originOffset = grid.OriginOffset;
+            
+            GetXY(originOffset,cellSize,planeIntersection, out int endX, out int endY);
+            var gridSize = new int2(grid.Grid.GetWidth(), grid.Grid.GetHeight());
+            ValidateGridPosition(gridSize, ref endX, ref endY);
+            Entities
+                .WithNone<PathfindingParams>()
+                .ForEach((Entity entity, int entityInQueryIndex,
+                DynamicBuffer<PathPosition> pathPositionBuffer,
                 ref Translation translation) =>
             {
-                grid.Grid.GetXY(translation.Value+(float3)SetupPathFindingGrid.Instance.OriginOffset*cellSize*0.5f ,out int startX, out int startY);
-  
-                ValidateGridPosition(ref startX, ref startY);
-                ecb.AddComponent(entity, new PathfindingParams
+                //grid.Grid.GetXY(translation.Value+(float3)grid.OriginOffset*cellSize*0.5f ,out int startX, out int startY);
+                GetXY(originOffset, cellSize, translation.Value + originOffset * cellSize * 0.5f,
+                    out int startX, out int startY);
+                ValidateGridPosition(gridSize, ref startX, ref startY);
+                ecb.AddComponent(entityInQueryIndex,entity, new PathfindingParams()
                 {
                     StartPosition = new int2(startX, startY),
                     EndPosition = new int2(endX, endY),
                 });
 
-            }).WithoutBurst().Run();
-        
+            }).ScheduleParallel();
+            _ecbSystem.AddJobHandleForProducer(Dependency);
         }
     }
 
-    private void ValidateGridPosition(ref int x, ref int y)
+    private static void GetXY(float3 originOffset, float cellSize, float3 worldPosition, out int x, out int y)
+    {      
+        x = Mathf.FloorToInt((worldPosition - originOffset).x / cellSize);
+        y = Mathf.FloorToInt((worldPosition - originOffset).z / cellSize);
+    }
+
+    private static void ValidateGridPosition(int2 gridDimensions, ref int x, ref int y)
     {
-        x = math.clamp(x, 0, SetupPathFindingGrid.Instance.Grid.GetWidth() - 1);
-        y = math.clamp(y, 0, SetupPathFindingGrid.Instance.Grid.GetHeight() - 1);
+        x = math.clamp(x, 0, gridDimensions.x - 1);
+        y = math.clamp(y, 0, gridDimensions.y - 1);
     }
 }

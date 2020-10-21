@@ -75,9 +75,9 @@ public class Pathfinding : SystemBase
         }.ScheduleParallel(_query,Dependency);
         
         _ecbSystem.AddJobHandleForProducer(Dependency);
-         pathNodeArray.Dispose(Dependency);
-         entities.Dispose(Dependency);
-         _neighbourOffsets.Dispose(Dependency);
+        pathNodeArray.Dispose(Dependency);
+        entities.Dispose(Dependency);
+        _neighbourOffsets.Dispose(Dependency);
 
     }
 
@@ -114,7 +114,7 @@ public class Pathfinding : SystemBase
                 
                 openList.Add(startNode.Index);
                 int currentNodeIndex = GetLowestCostFNodeIndex(openList, PathNodeArray);
-                var recursionCounter = new int();
+                var recursionCounter = 0;
                 var flags = RecursivePathFinding(currentNodeIndex, endNodeIndex, openList, closedList, recursionCounter);
                 
                 DynamicBuffer<PathPosition> pathPositionBuffer = pathPositionBuffers[i];
@@ -139,6 +139,12 @@ public class Pathfinding : SystemBase
         private int RecursivePathFinding( int currentNodeIndex, int endNodeIndex, NativeList<int> openList, NativeList<int> closedList, int counter)
         {
             counter++;
+            //Debug.Log($"counter {counter}");
+            if (counter > 100)
+            {
+                //Debug.Log("broke out of recursive loop");
+                return -1;
+            }
             var endNode = PathNodeArray[endNodeIndex];
             var endPosition = new int2(endNode.X, endNode.Y);
 
@@ -179,36 +185,43 @@ public class Pathfinding : SystemBase
                     var neighbourNode = PathNodeArray[neighbourNodeIndex];
                     if (neighbourNode.IsWalkable)
                     {
-                     
-                        
                         var currentNodePosition = new int2(currentNode.X, currentNode.Y);
                       
                         int tentativeGCost = currentNode.GCost +
                                              CalculateDistanceCost(currentNodePosition, neighbourPosition);
                         if (tentativeGCost < neighbourNode.GCost)
                         {
+
+                            if (neighbourNode.CameFromNodeIndex != -1)
+                            {
+                                Debug.Log(
+                                    $"already had a valid came from index{neighbourNode.CameFromNodeIndex}");
+                            }
+
                             neighbourNode.CameFromNodeIndex = currentNode.Index;
                             neighbourNode.GCost = tentativeGCost;
-                            neighbourNode.HCost =
-                                CalculateDistanceCost(neighbourPosition, endPosition);
+                            neighbourNode.HCost = CalculateDistanceCost(neighbourPosition, endPosition);
                             neighbourNode.CalculateFCost();
                             PathNodeArray[neighbourNodeIndex] = neighbourNode;
-                            if (!openList.Contains(neighbourNode.Index))
-                            {
-                                openList.Add(neighbourNode.Index);
-                            }
+
+                            openList.Add(neighbourNode.Index);
                         }
                     }
                 }
-                closedList.Add(currentNode.Index);
+                if(!closedList.Contains(currentNode.Index))
+                    closedList.Add(currentNode.Index);
+                var indexToRemove = -1;
                 for (int j = 0; j < openList.Length; j++)
                 {
                     if (openList[j] == currentNode.Index)
                     {
-                        openList.RemoveAtSwapBack(j);
+                        indexToRemove = j;
                         break;
                     }
                 }
+                if(indexToRemove>=0)
+                    openList.RemoveAtSwapBack(indexToRemove);
+                
                 if (openList.Length > 0)
                 {
                     for (int i = 0; i < openList.Length; i++)
@@ -253,7 +266,7 @@ public class Pathfinding : SystemBase
                     CameFromNodeIndex = -1
                 };
 
-
+        
                 pathNodeArray[pathNode.Index] = pathNode;
             }
         }
@@ -287,14 +300,25 @@ public class Pathfinding : SystemBase
 
         //found path
         pathPositionBuffer.Add(new PathPosition {Value = new int2(endNode.X, endNode.Y)});
-
+        var existingList = new NativeList<int>(Allocator.Temp);
         var currentNode = endNode;
+        existingList.Add(currentNode.Index);
         while (currentNode.CameFromNodeIndex != -1)
         {
             var cameFromNode = pathNodeArray[currentNode.CameFromNodeIndex];
-            
-            pathPositionBuffer.Add(new PathPosition {Value = new int2(cameFromNode.X, cameFromNode.Y)});
-            currentNode = cameFromNode;
+
+            if (existingList.Contains(cameFromNode.Index))
+            {
+                Debug.Log("BREAK PATH CONSTRUCTION, DUPLICATE ");
+                break;
+            }
+            else
+            {
+                existingList.Add(cameFromNode.Index);
+                pathPositionBuffer.Add(new PathPosition {Value = new int2(cameFromNode.X, cameFromNode.Y)});
+                currentNode = cameFromNode;
+            }
+
         }
     }
 

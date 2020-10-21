@@ -32,9 +32,9 @@ namespace DefaultNamespace
         }
         private void Update()
         {
-
             if (Input.GetMouseButtonDown(0))
             {
+               
                 Vector3 planeNormal = new Vector3(0, 1, 0);
                 Vector3 planeCenter = gameObject.transform.position;
                 Ray cameraRay = Camera.main.ScreenPointToRay(Input.mousePosition);
