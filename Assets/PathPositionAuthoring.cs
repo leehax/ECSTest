@@ -7,5 +7,6 @@ public class PathPositionAuthoring:MonoBehaviour, IConvertGameObjectToEntity
     {
         dstManager.AddBuffer<PathPosition>(entity);
         dstManager.AddComponent<AgentTag>(entity);
+        dstManager.AddComponent<AwaitingOrder>(entity);
     }
 }

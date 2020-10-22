@@ -84,10 +84,10 @@ public class Pathfinding : SystemBase
     [BurstCompile]
     private struct FindPathJob : IJobChunk
     {
-        public int2 GridSize;
+        [ReadOnly] public int2 GridSize;
         [DeallocateOnJobCompletion]
         public NativeArray<PathNode> PathNodeArray;
-        [ReadOnly]public EntityTypeHandle EntityType;
+        [ReadOnly] public EntityTypeHandle EntityType;
         public ComponentTypeHandle<PathfindingParams> PathfindingParamsType;
         public ComponentTypeHandle<PathIndex> PathIndexType;
         public BufferTypeHandle<PathPosition> PathPositionType;
@@ -106,7 +106,10 @@ public class Pathfinding : SystemBase
                 var endNodeIndex = CalculateIndex(pathfindingParams.EndPosition.x, pathfindingParams.EndPosition.y, GridSize.x);
                 var startNode = PathNodeArray[CalculateIndex(pathfindingParams.StartPosition.x, pathfindingParams.StartPosition.y, GridSize.x)];
                 startNode.GCost = 0;
+                startNode.HCost = CalculateDistanceCost(new int2(startNode.X, startNode.Y),
+                    pathfindingParams.EndPosition);
                 startNode.CalculateFCost();
+                startNode.CameFromNodeIndex = -1;
                 PathNodeArray[startNode.Index] = startNode;
                 
                 NativeList<int> openList = new NativeList<int>(128, Allocator.Temp);
@@ -123,7 +126,7 @@ public class Pathfinding : SystemBase
                 {
                     PathNode endNode = PathNodeArray[endNodeIndex];
                     CalculatePath(PathNodeArray, endNode, pathPositionBuffer);
-                    pathIndexArray[i] = new PathIndex {Value = pathPositionBuffer.Length - 1};
+                    pathIndexArray[i] = new PathIndex {Value = pathPositionBuffer.Length - 2};
 
                 }
                 else
@@ -133,22 +136,17 @@ public class Pathfinding : SystemBase
 
                 openList.Dispose();
                 closedList.Dispose();
-                CommandBuffer.RemoveComponent<PathfindingParams>(chunkIndex,entities[chunkIndex]);
+                CommandBuffer.RemoveComponent<PathfindingParams>(chunkIndex,entities[0]); //removing the components removes the entity from our entity query
             }
         }
         private int RecursivePathFinding( int currentNodeIndex, int endNodeIndex, NativeList<int> openList, NativeList<int> closedList, int counter)
         {
             counter++;
-            //Debug.Log($"counter {counter}");
-            if (counter > 100)
-            {
-                //Debug.Log("broke out of recursive loop");
-                return -1;
-            }
             var endNode = PathNodeArray[endNodeIndex];
             var endPosition = new int2(endNode.X, endNode.Y);
 
             var currentNode = PathNodeArray[currentNodeIndex];
+            //Debug.Log($" {counter} Current node index {currentNode.Index} came from {currentNode.CameFromNodeIndex}");
             if (currentNodeIndex == endNodeIndex)
             {
                 if (endNode.CameFromNodeIndex == -1)
@@ -176,14 +174,13 @@ public class Pathfinding : SystemBase
                     }
                     int neighbourNodeIndex =
                         CalculateIndex(neighbourPosition.x, neighbourPosition.y, GridSize.x);
-                    bool isInOpenOrClosedList =
-                        openList.Contains(neighbourNodeIndex) || closedList.Contains(neighbourNodeIndex);
-                    if (isInOpenOrClosedList)
+                    
+                    if(closedList.Contains(neighbourNodeIndex))
                     {
                         continue;
                     }
                     var neighbourNode = PathNodeArray[neighbourNodeIndex];
-                    if (neighbourNode.IsWalkable)
+                    if (neighbourNode.IsWalkable )
                     {
                         var currentNodePosition = new int2(currentNode.X, currentNode.Y);
                       
@@ -191,20 +188,17 @@ public class Pathfinding : SystemBase
                                              CalculateDistanceCost(currentNodePosition, neighbourPosition);
                         if (tentativeGCost < neighbourNode.GCost)
                         {
-
-                            if (neighbourNode.CameFromNodeIndex != -1)
-                            {
-                                Debug.Log(
-                                    $"already had a valid came from index{neighbourNode.CameFromNodeIndex}");
-                            }
-
+                            
+                            
                             neighbourNode.CameFromNodeIndex = currentNode.Index;
                             neighbourNode.GCost = tentativeGCost;
                             neighbourNode.HCost = CalculateDistanceCost(neighbourPosition, endPosition);
                             neighbourNode.CalculateFCost();
                             PathNodeArray[neighbourNodeIndex] = neighbourNode;
-
-                            openList.Add(neighbourNode.Index);
+                            if (!openList.Contains(neighbourNode.Index))
+                            {
+                                openList.Add(neighbourNode.Index);
+                            }
                         }
                     }
                 }
@@ -309,7 +303,7 @@ public class Pathfinding : SystemBase
 
             if (existingList.Contains(cameFromNode.Index))
             {
-                Debug.Log("BREAK PATH CONSTRUCTION, DUPLICATE ");
+                Debug.LogWarning("BREAK PATH CONSTRUCTION, DUPLICATE ");
                 break;
             }
             else
@@ -344,8 +338,6 @@ public class Pathfinding : SystemBase
 
         return path;
     }
-    
-
     private static bool IsPositionValid(int2 gridPosition, int2 gridSize)
     {
         return

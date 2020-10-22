@@ -10,14 +10,14 @@ public class DrawPathSystem:SystemBase
 {
     protected override void OnUpdate()
     {
-        // Entities.ForEach((Entity entity, in AgentTag agentTag) =>
-        // {
-        //     var drawPathJob = new DrawPathJob
-        //     {
-        //         Entity = entity,
-        //         PathPositionFromEntity = GetBufferFromEntity<PathPosition>(true),
-        //     };
-        // }).Run();
+         Entities.ForEach((Entity entity, in AgentTag agentTag) =>
+         {
+             var drawPathJob = new DrawPathJob
+             {
+                 Entity = entity,
+                 PathPositionFromEntity = GetBufferFromEntity<PathPosition>(true),
+             };
+         }).Run();
     }
 
 
