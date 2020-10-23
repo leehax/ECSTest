@@ -1,4 +1,5 @@
 ﻿using DefaultNamespace;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -27,6 +28,7 @@ public class UnitMoveOrderSystem:SystemBase
         {
             _randoms[i] = new Random(r == 0 ? r + 1 : r);
         }
+        RequireForUpdate(_query);
        
     }
 
@@ -41,14 +43,11 @@ public class UnitMoveOrderSystem:SystemBase
             _grid = SetupPathFindingGrid.Instance;
 
         var ecb = _ecbSystem.CreateCommandBuffer().AsParallelWriter();
-
-        var grid = SetupPathFindingGrid.Instance;
-        float cellSize = grid.Grid.GetCellSize();
-        float3 originOffset = grid.OriginOffset;
-        //GetXY(originOffset,cellSize,planeIntersection, out int endX, out int endY);
-        var gridSize = new int2(grid.Grid.GetWidth(), grid.Grid.GetHeight());
-        var mousePos = GetMousePosOnPlane();
-        GetXY(originOffset, cellSize, mousePos, out int endX, out int endY);
+        float cellSize = _grid.Grid.GetCellSize();
+        float3 originOffset = _grid.OriginOffset;
+        var gridSize = new int2(_grid.Grid.GetWidth(), _grid.Grid.GetHeight());
+        //var mousePos = GetMousePosOnPlane();
+       // GetXY(originOffset, cellSize, mousePos, out int endX, out int endY);
         var entities = _query.ToEntityArrayAsync(Allocator.TempJob, out JobHandle jobhandle);
         Dependency = JobHandle.CombineDependencies(Dependency, jobhandle);
         Dependency = new RandomMoveOrderJob
@@ -62,33 +61,13 @@ public class UnitMoveOrderSystem:SystemBase
             TranslationType = GetComponentTypeHandle<Translation>(true),
             Randoms = _randoms
         }.ScheduleParallel(_query, Dependency);
-        // Entities
-        //     .WithNone<PathfindingParams>()
-        //     .ForEach((Entity entity, int entityInQueryIndex,
-        //     DynamicBuffer<PathPosition> pathPositionBuffer,
-        //     ref Translation translation) =>
-        // {
-        //     Random random = new Random((uint)Time.DeltaTime+1);
-        //     var end = GetRandomPos(random,gridSize);
-        //     int endX = end.x;
-        //     int endY = end.y;
-        //     ValidateGridPosition(gridSize, ref endX, ref endY);
-        //     //grid.Grid.GetXY(translation.Value+(float3)grid.OriginOffset*cellSize*0.5f ,out int startX, out int startY);
-        //     GetXY(originOffset, cellSize, translation.Value + originOffset * cellSize * 0.5f,
-        //         out int startX, out int startY);
-        //     ValidateGridPosition(gridSize, ref startX, ref startY);
-        //     ecb.AddComponent(entityInQueryIndex,entity, new PathfindingParams()
-        //     {
-        //         StartPosition = new int2(startX, startY),
-        //         EndPosition = new int2(endX, endY),
-        //     });
-        //
-        // }).ScheduleParallel();
+    
         _ecbSystem.AddJobHandleForProducer(Dependency);
         entities.Dispose(Dependency);
 
     }
-
+    
+    [BurstCompile]
     private struct RandomMoveOrderJob : IJobChunk
     {
        // [NativeSetThreadIndex] private int _threadId;
@@ -110,10 +89,11 @@ public class UnitMoveOrderSystem:SystemBase
             for (int i = 0; i < chunk.Count; i++)
             {
                 var translation = translations[i];
-                var random = Randoms[chunkIndex];
+                var loopingChunkIndex = 127 % (chunkIndex + 1);
+                var random = Randoms[loopingChunkIndex];
                 var end = random.NextInt2(new int2(0, 0), GridSize - 1);
                 //var end = EndPos;
-                Randoms[chunkIndex] = random;
+                Randoms[loopingChunkIndex] = random;
                 ValidateGridPosition(GridSize, ref end);
                 GetXY(OriginOffset, CellSize, translation.Value + OriginOffset * CellSize * 0.5f,
                     out int startX, out int startY);
@@ -123,7 +103,7 @@ public class UnitMoveOrderSystem:SystemBase
                     StartPosition = new int2(startX, startY),
                     EndPosition = end
                 });
-                CommandBuffer.RemoveComponent<AwaitingOrder>(chunkIndex, entities[0]);
+                CommandBuffer.RemoveComponent<AwaitingOrder>(chunkIndex, entities[i]);
             }
         }
     }

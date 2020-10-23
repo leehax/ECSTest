@@ -126,7 +126,7 @@ public class Pathfinding : SystemBase
                 {
                     PathNode endNode = PathNodeArray[endNodeIndex];
                     CalculatePath(PathNodeArray, endNode, pathPositionBuffer);
-                    pathIndexArray[i] = new PathIndex {Value = pathPositionBuffer.Length - 2};
+                    pathIndexArray[i] = new PathIndex {Value = pathPositionBuffer.Length - 1};
 
                 }
                 else
@@ -136,7 +136,7 @@ public class Pathfinding : SystemBase
 
                 openList.Dispose();
                 closedList.Dispose();
-                CommandBuffer.RemoveComponent<PathfindingParams>(chunkIndex,entities[0]); //removing the components removes the entity from our entity query
+                CommandBuffer.RemoveComponent<PathfindingParams>(chunkIndex,entities[i]); //removing the components removes the entity from our entity query
             }
         }
         private int RecursivePathFinding( int currentNodeIndex, int endNodeIndex, NativeList<int> openList, NativeList<int> closedList, int counter)
